@@ -2,10 +2,142 @@
 title: "Lab 6"
 author: "Isaac Plotkin"
 date: "2/25/2022"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(broom)
+library(leaps)
+library(rms)
+library(Sleuth3) #case1201 data
 ```
+
+```{r}
+sat_scores <- Sleuth3::case1201 
+summary(sat_scores)
+```
+
+```{r}
+full_model <- lm(SAT ~ Takers + Income + Years + Public + Expend + Rank , data = sat_scores)
+tidy(full_model)
+```
+
+1. 
+```{r}
+model_select <- regsubsets(SAT ~ Takers + Income + Years + Public + Expend + 
+                             Rank , data = sat_scores, method = "backward")
+select_summary <- summary(model_select)
+coef(model_select,1:6) #display coefficients 
+select_summary$adjr2
+```
+
+2. 
+```{r}
+select_summary$bic
+```
+
+3. 
+```{r}
+model_select_aic <- step(full_model, direction = "backward")
+tidy(model_select_aic)
+```
+
+4. The final models do not all have the same number of predictors. AIC and Adjusted R^2 have 4 predictors, while BIC has 3 predictors. 
+BIC favors more parsimonious models so this is expected.
+
+
+5. 
+```{r}
+aic_aug <- augment(model_select_aic) %>%
+  mutate(obs_num = row_number()) #add observation number for plots
+
+head(aic_aug, 5)
+```
+
+6. 
+```{r}
+# leverage_threshold = (2*(p+1)) / n
+leverage_threshold <- 2*(4+1)/nrow(aic_aug)
+leverage_threshold
+```
+
+7.
+```{r}
+ggplot(data = aic_aug, aes(x = obs_num, y = .hat)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept=leverage_threshold,color = "red")+
+  labs(x= "Observation Number",y = "Leverage",title = "Leverage of Observations")
+  
+```
+
+8. 
+```{r}
+sat_scores[22,]
+sat_scores[29,]
+```
+The high leverage states are Louisiana and Alaska.
+
+9.
+```{r}
+ggplot(data = aic_aug, aes(x = .fitted, y = .std.resid)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept=2,color = "red")+
+  geom_hline(yintercept=-2,color = "red")+
+  labs(x= "Predicted Values",y = "Standardized residuals",title = "Standardized residuals vs Predicted Values")
+```
+
+10.
+```{r}
+aic_aug_outlier <- aic_aug %>% filter(.std.resid > 2 | .std.resid < -2)
+aic_aug_outlier
+```
+```{r}
+sat_scores_outlier1 <- sat_scores %>% filter(SAT == 988)
+sat_scores_outlier1
+sat_scores_outlier2 <- sat_scores %>% filter(SAT == 923)
+sat_scores_outlier2
+sat_scores_outlier1 <- sat_scores %>% filter(SAT == 790)
+sat_scores_outlier1
+```
+Mississippi, Alaska and South Carolina are considered to have standardized residuals with large magnitude.
+
+
+11. 
+```{r}
+ggplot(data = aic_aug, aes(x = obs_num, y = .cooksd)) + 
+  geom_point(alpha = 0.7) + 
+  geom_hline(yintercept=1,color = "red")+
+  labs(x= "Observation Number",y = "Cook's Distance",title = "Cook's Distance of Observations")
+```
+```{r}
+sat_scores[29,]
+```
+Alaska is an influential point because it has a Cook's Distance > 1. I could drop Alaska from the dataset because I know it is an outlier and has a large influence on the prediction. If I did this I would need to make sure to mention that in the right up of the results. I could run the regression both with and without this observation to see how it influences the model.
+
+
+12. 
+```{r}
+Expend <- lm(Expend ~ Years + Public + Rank , data = sat_scores)
+summary(Expend)
+```
+```{r}
+# R^2 is 0.2102 and VIF = 1 / (1-R^2)
+VIF = 1 / (1-0.2102)
+VIF
+```
+Expend does not appear to be highly correlated with any other predictor variables because it has a VIF of 1.266. This is much lower than the threshold that is used to indicate concerning multicollinearity, which is VIF > 10.
+
+
+12.
+```{r}
+vif(model_select_aic)
+```
+There are no obvious concerns with multicollinearity in this model because all of the VIFs are much less than 10.
+
+
 
